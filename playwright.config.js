@@ -12,6 +12,8 @@ module.exports = defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
+  // En CI, si fallan 5 pruebas se detiene la suite: el pipeline falla rápido y bloquea el despliegue.
+  maxFailures: process.env.CI ? 5 : 0,
   reporter: [
     ['list'],
     ['html', { open: 'never', outputFolder: 'playwright-report' }],
@@ -19,6 +21,8 @@ module.exports = defineConfig({
   ],
   use: {
     baseURL: BASE_URL,
+    actionTimeout: 10000,
+    navigationTimeout: 15000,
     locale: 'es-MX',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',

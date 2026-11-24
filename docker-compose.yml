@@ -1,0 +1,66 @@
+# Pila completa en EC2: aplicación + OpenTelemetry Collector + OpenObserve + node-exporter.
+services:
+  app:
+    build: .
+    container_name: users-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      SESSION_SECRET: ${SESSION_SECRET:?define SESSION_SECRET en .env}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin123!}
+      SEED_DEMO: ${SEED_DEMO:-1}
+      DEPLOY_ENV: ${DEPLOY_ENV:-production}
+      APP_VERSION: ${APP_VERSION:-1.0.0}
+      OTEL_SERVICE_NAME: users-app
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_FLUSH_MS: "10000"
+    volumes:
+      - app-data:/data
+    depends_on:
+      - otel-collector
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.116.1
+    container_name: otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    environment:
+      O2_BASIC_AUTH: ${O2_BASIC_AUTH:?define O2_BASIC_AUTH en .env}
+    volumes:
+      - ./observability/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - openobserve
+
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:latest
+    container_name: openobserve
+    restart: unless-stopped
+    ports:
+      - "5080:5080"
+    environment:
+      ZO_ROOT_USER_EMAIL: ${O2_USER:?define O2_USER en .env}
+      ZO_ROOT_USER_PASSWORD: ${O2_PASS:?define O2_PASS en .env}
+      ZO_DATA_DIR: /data
+    volumes:
+      - o2-data:/data
+
+  # Métricas de la máquina (CPU, RAM, red, temperatura si el hardware la expone)
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: node-exporter
+    restart: unless-stopped
+    network_mode: host
+    pid: host
+    command:
+      - "--path.rootfs=/host"
+      - "--web.listen-address=:9100"
+    volumes:
+      - /:/host:ro,rslave
+
+volumes:
+  app-data:
+  o2-data:

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Usuarios · Gestión de usuarios</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">GU</span>
+      <span class="brand-name">Gestión de usuarios</span>
+    </div>
+    <div class="topbar-user">
+      <span>Hola, <strong id="who">…</strong></span>
+      <span id="role-badge" class="badge"></span>
+      <button id="logout-btn" type="button" class="btn btn-ghost">Cerrar sesión</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="page-head">
+      <div>
+        <h1>Usuarios</h1>
+        <p id="count" class="muted"></p>
+      </div>
+      <button id="new-user" type="button" class="btn btn-primary">Nuevo usuario</button>
+    </div>
+
+    <div class="toolbar">
+      <label for="search" class="sr-only">Buscar usuarios</label>
+      <input id="search" type="search" placeholder="Buscar por nombre, usuario o correo" autocomplete="off">
+    </div>
+
+    <p id="status" class="status" role="status" aria-live="polite" hidden></p>
+
+    <div class="table-wrap">
+      <table id="users-table">
+        <thead>
+          <tr>
+            <th scope="col">Nombre</th>
+            <th scope="col">Usuario</th>
+            <th scope="col">Correo</th>
+            <th scope="col">Rol</th>
+            <th scope="col">Creado</th>
+            <th scope="col">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="users-body"></tbody>
+      </table>
+      <p id="empty" class="empty" hidden>No hay usuarios que coincidan con la búsqueda.</p>
+    </div>
+  </main>
+
+  <dialog id="user-dialog" aria-labelledby="dialog-title">
+    <form id="user-form" novalidate>
+      <h2 id="dialog-title">Nuevo usuario</h2>
+
+      <div class="field">
+        <label for="f-name">Nombre</label>
+        <input id="f-name" name="name" type="text" autocomplete="off">
+        <p id="err-name" class="field-error" hidden></p>
+      </div>
+      <div class="field">
+        <label for="f-username">Usuario</label>
+        <input id="f-username" name="username" type="text" autocomplete="off">
+        <p id="err-username" class="field-error" hidden></p>
+      </div>
+      <div class="field">
+        <label for="f-email">Correo electrónico</label>
+        <input id="f-email" name="email" type="email" autocomplete="off">
+        <p id="err-email" class="field-error" hidden></p>
+      </div>
+      <div class="field">
+        <label for="f-role">Rol</label>
+        <select id="f-role" name="role">
+          <option value="user">Usuario</option>
+          <option value="admin">Administrador</option>
+        </select>
+        <p id="err-role" class="field-error" hidden></p>
+      </div>
+      <div class="field">
+        <label for="f-password">Contraseña</label>
+        <input id="f-password" name="password" type="password" autocomplete="new-password">
+        <p id="password-hint" class="hint"></p>
+        <p id="err-password" class="field-error" hidden></p>
+      </div>
+
+      <p id="form-error" class="form-error" hidden></p>
+
+      <div class="dialog-actions">
+        <button id="cancel-form" type="button" class="btn btn-ghost">Cancelar</button>
+        <button id="save-user" type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <h2 id="confirm-title">Eliminar usuario</h2>
+    <p id="confirm-text"></p>
+    <div class="dialog-actions">
+      <button id="cancel-delete" type="button" class="btn btn-ghost">Cancelar</button>
+      <button id="confirm-delete" type="button" class="btn btn-danger">Eliminar</button>
+    </div>
+  </dialog>
+
+  <script src="/js/common.js"></script>
+  <script src="/js/users.js"></script>
+</body>
+</html>

@@ -1,0 +1,156 @@
+name: CI/CD - Gestión de usuarios
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cicd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  # ------------------------------------------------------------------ RF-01: pruebas del backend (Jest)
+  test-backend:
+    name: Pruebas backend (Jest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Instalar dependencias
+        run: if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+      - name: Ejecutar Jest
+        run: npx jest --json --outputFile=jest-results.json
+      - name: Guardar resultados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jest-results
+          path: jest-results.json
+          if-no-files-found: ignore
+
+  # ------------------------------------------------------------------ RF-01: pruebas del frontend (Playwright)
+  test-frontend:
+    name: Pruebas frontend (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Instalar dependencias
+        run: if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Ejecutar Playwright
+        run: npx playwright test
+        env:
+          CI: "true"
+      - name: Guardar resultados y reporte HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            playwright-results.json
+            playwright-report/
+          if-no-files-found: ignore
+
+  # ------------------------------------------------------------------ RF-03: informar a OpenObserve (éxito o fallo)
+  report-tests:
+    name: Registrar resultado en OpenObserve
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: results
+        continue-on-error: true
+      - name: Enviar evento "tests" (y "incident" si algo falló)
+        env:
+          O2_URL: ${{ secrets.O2_URL || format('http://{0}:5080', secrets.EC2_HOST) }}
+          O2_USER: ${{ secrets.O2_USER }}
+          O2_PASS: ${{ secrets.O2_PASS }}
+        run: |
+          if [ "${{ needs.test-backend.result }}" = "success" ] && [ "${{ needs.test-frontend.result }}" = "success" ]; then
+            STATUS=success
+            MSG="Todas las pruebas pasaron (backend: ${{ needs.test-backend.result }}, frontend: ${{ needs.test-frontend.result }})"
+          else
+            STATUS=failure
+            MSG="Pruebas fallidas (backend: ${{ needs.test-backend.result }}, frontend: ${{ needs.test-frontend.result }}). Despliegue bloqueado."
+          fi
+          node scripts/send-ci-event.js --event tests --status "$STATUS" --message "$MSG" \
+            --jest results/jest-results/jest-results.json \
+            --playwright results/playwright-results/playwright-results.json
+          if [ "$STATUS" = "failure" ]; then
+            node scripts/send-ci-event.js --event incident --status failure --message "INCIDENTE: pipeline detenido, no se desplegó el commit" \
+              --jest results/jest-results/jest-results.json \
+              --playwright results/playwright-results/playwright-results.json
+          fi
+
+  # ------------------------------------------------------------------ RF-02: despliegue a EC2 solo si TODO pasó
+  deploy:
+    name: Desplegar en AWS EC2
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Configurar SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/ec2_key
+          chmod 600 ~/.ssh/ec2_key
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copiar el código al servidor
+        run: |
+          rsync -az --delete \
+            --exclude '.git' --exclude 'node_modules' --exclude 'tests' --exclude 'docs' \
+            --exclude 'playwright-report' --exclude 'test-results' --exclude '.env' \
+            -e "ssh -i ~/.ssh/ec2_key" \
+            ./ "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/app/"
+
+      - name: Actualizar contenedores
+        run: |
+          ssh -i ~/.ssh/ec2_key "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+            "cd ~/app && touch .env && sed -i '/^APP_VERSION=/d' .env && echo 'APP_VERSION=${GITHUB_SHA::7}' >> .env && docker compose up -d --build --remove-orphans && docker image prune -f"
+
+      - name: Verificar /health tras el despliegue
+        run: |
+          for i in $(seq 1 20); do
+            if ssh -i ~/.ssh/ec2_key "${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" "curl -fsS http://localhost:3000/health"; then
+              echo; echo "Aplicación saludable"; exit 0
+            fi
+            sleep 3
+          done
+          echo "La aplicación no respondió en /health"; exit 1
+
+      - name: Registrar evento de despliegue en OpenObserve
+        if: always()
+        env:
+          O2_URL: ${{ secrets.O2_URL || format('http://{0}:5080', secrets.EC2_HOST) }}
+          O2_USER: ${{ secrets.O2_USER }}
+          O2_PASS: ${{ secrets.O2_PASS }}
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            node scripts/send-ci-event.js --event deploy --status success --message "Despliegue correcto en EC2 (contenedores actualizados)"
+          else
+            node scripts/send-ci-event.js --event deploy --status failure --message "El despliegue en EC2 falló"
+          fi

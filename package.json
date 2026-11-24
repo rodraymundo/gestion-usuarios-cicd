@@ -1,0 +1,23 @@
+{
+  "name": "gestion-usuarios-cicd",
+  "version": "1.0.0",
+  "description": "Aplicación de gestión de usuarios (login + CRUD) con CI/CD en GitHub Actions, despliegue en AWS EC2 y observabilidad con OpenObserve.",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node backend/src/server.js",
+    "dev": "node --watch backend/src/server.js",
+    "test": "jest",
+    "test:api": "jest",
+    "test:e2e": "playwright test",
+    "test:all": "jest && playwright test",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "jest": "^29.7.0"
+  }
+}

@@ -1,0 +1,9 @@
+node_modules/
+playwright-report/
+test-results/
+playwright-results.json
+jest-results.json
+.env
+*.db
+*.db-journal
+data/

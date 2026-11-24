@@ -1,0 +1,13 @@
+node_modules
+tests
+docs
+scripts
+observability
+.github
+playwright-report
+test-results
+playwright-results.json
+jest-results.json
+*.md
+.env
+.git
